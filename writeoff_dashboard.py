@@ -166,12 +166,17 @@ def _aggregate_one(df: pd.DataFrame, segment_col, mode: str, id_col: str, recove
         totals = totals.set_index(['file_month', segment_col]).reindex(idx, fill_value=0).reset_index()
         totals = totals.rename(columns={segment_col: 'subsegment'})
     else:
-        totals = totals.set_index('file_month').reindex(all_months, fill_value=0).reset_index()
+        idx = pd.Index(all_months, name='file_month')
+        totals = totals.set_index('file_month').reindex(idx, fill_value=0).reset_index()
         totals['subsegment'] = 'all'
+
+    # ensure file_month is Period dtype after reindex (reindex can strip it)
+    totals['file_month'] = totals['file_month'].dt.to_period('M') if hasattr(totals['file_month'], 'dt') else pd.PeriodIndex(totals['file_month'], freq='M')
 
     totals['recovery_pct'] = np.where(totals['total_balance'] > 0,
                                        totals['total_recovery'] / totals['total_balance'] * 100, 0)
     acct = df.groupby('file_month', observed=False)[id_col].nunique().reset_index(name='n_acct')
+    acct['file_month'] = pd.PeriodIndex(acct['file_month'], freq='M')
     totals = totals.merge(acct, on='file_month', how='left')
     totals['ats'] = np.where(totals['n_acct'] > 0, totals['total_balance'] / totals['n_acct'], 0)
     totals['month_label'] = totals['file_month'].dt.strftime('%b %Y')
